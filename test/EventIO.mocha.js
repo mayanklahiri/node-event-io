@@ -6,7 +6,8 @@ const _ = require('lodash')
   ;
 
 
-describe('EventIO: ES6 event acceptor and emitter', function() {
+describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
+    function() {
 
   class TestClass extends EventIO { }
   var testInstance;
@@ -21,20 +22,24 @@ describe('EventIO: ES6 event acceptor and emitter', function() {
 
   it('should add the correct interface to child classes', function() {
     let x = testInstance;
-    assert.isTrue(_.isFunction(x.emit), 'should add emit()');
-    assert.isTrue(_.isFunction(x.on), 'should add on()');
-    assert.isTrue(_.isFunction(x.once), 'should add once()');
-    assert.isTrue(_.isFunction(x.accept), 'should add accept()');
+    assert.isTrue(_.isFunction(x.emit), 'did not add emit()');
+    assert.isTrue(_.isFunction(x.accept), 'did not add accept()');
+    assert.isTrue(_.isFunction(x.on), 'did not add on()');
+    assert.isTrue(_.isFunction(x.once), 'did not add once()');
+    assert.isTrue(_.isFunction(x.upto), 'did not add upto()');
     assert.isTrue(
-        _.isFunction(x.setAcceptHandlers), 'should add setAcceptHandlers()');
+        _.isFunction(x.removeListener), 'did not add removeListener()');
+    assert.isTrue(
+        _.isFunction(x.removeAllListeners), 'did not add removeAllListeners()');
+    assert.isTrue(
+        _.isFunction(x.setAcceptHandlers), 'did not add setAcceptHandlers()');
   });
 
 
-  it('accept() should throw on unknown events', function() {
-    let x = testInstance;
+  it('accept() should throw on unregistered event names', function() {
     assert.throws(() => {
       testInstance.accept('null', 123, 456);
-    }, /no matching handler/i);
+    }, /no matching handler for event type "null"/i);
     assert.throws(() => {
       testInstance.accept(['null', 123, 456]);
     }, /expected string event name/i);
@@ -44,14 +49,14 @@ describe('EventIO: ES6 event acceptor and emitter', function() {
   });
 
 
-  it('accept() should invoke handlers on known events and return results',
+  it('accept() should invoke listeners on known events and return results',
       function() {
     let x = testInstance;
     x.setAcceptHandlers({
-      first (argsArray) {
+      first (...argsArray) {
         return _.first(argsArray);
       },
-      size (argsArray) {
+      size (...argsArray) {
         return _.size(argsArray);
       }
     });
@@ -66,7 +71,7 @@ describe('EventIO: ES6 event acceptor and emitter', function() {
     let x = testInstance;
 
     x.setAcceptHandlers({
-      alarm (argsArray) {
+      alarm (...argsArray) {
         this.emit('trigger_alarm', argsArray);
       },
     });
@@ -90,7 +95,7 @@ describe('EventIO: ES6 event acceptor and emitter', function() {
     let x = testInstance;
 
     x.setAcceptHandlers({
-      alarm (argsArray) {
+      alarm (...argsArray) {
         this.emit('alarm_1');
         this.emit('alarm_2');
         this.emit('alarm_3');
@@ -134,7 +139,7 @@ describe('EventIO: ES6 event acceptor and emitter', function() {
     let x = testInstance;
 
     x.setAcceptHandlers({
-      alarm (argsArray) {
+      alarm (...argsArray) {
         this.emit('alarm_1');
         this.emit('alarm_2');
         this.emit('alarm_3');
@@ -173,16 +178,15 @@ describe('EventIO: ES6 event acceptor and emitter', function() {
   });
 
 
-
   it('removeListener() should remove listeners of all types', function() {
     let x = testInstance;
 
     x.setAcceptHandlers({
-      alarm (argsArray) {
+      alarm (...argsArray) {
         this.emit('alarm_1');
         this.emit('alarm_2');
         this.emit('alarm_3');
-      },
+      }
     });
 
     let eventLog = [];
@@ -191,6 +195,9 @@ describe('EventIO: ES6 event acceptor and emitter', function() {
     });
     x.on('alarm_1', () => {
       eventLog.push('alarm_1-a');
+    });
+    x.once('alarm_2', (argsArray) => {
+      eventLog.push('alarm_2');
     });
     x.once('alarm_2', (argsArray) => {
       eventLog.push('alarm_2');
@@ -205,8 +212,151 @@ describe('EventIO: ES6 event acceptor and emitter', function() {
 
     x.accept('alarm');
 
+    // remove accept handler and ensure accept throws.
+    x.setAcceptHandlers({alarm: null});
+    assert.throws(() => {
+      x.accept('alarm');
+    }, /No matching handler for event type "alarm"/i);
+
     // no emits should have been triggers.
     assert.deepEqual(eventLog, ['alarm_1-a']);
   });
 
+
+  it('accept() should match against a schema if one is present', function() {
+    const x = testInstance;
+    x.setAcceptHandlers({
+      alarm (...argsArray) {
+
+      }
+    });
+    x.$schema = {
+      accept: {
+        alarm: [
+          {
+            name: 'AlarmLevel',
+            type: 'integer',
+            minValue: 4
+          }
+        ]
+      }
+    };
+
+    assert.throws(() => {
+      x.accept('alarm', 3);
+    }, /"alarm": Index 0 \(AlarmLevel\): expected a number >= 4, got 3./i);
+
+    assert.throws(() => {
+      x.accept('alarm', 4, 5);
+    }, /event "alarm": expected an array of length 1, got length 2/i);
+
+    assert.throws(() => {
+      x.accept('alarm', '4');
+    }, /Invalid data for event "alarm": Index 0 \(AlarmLevel\): expected a number, got string./i);
+
+    assert.doesNotThrow(() => {
+      x.accept('alarm', 4);
+    });
+  });
+
+
+  it('emit() should match against a schema if one is present', function() {
+    const x = testInstance;
+    x.setAcceptHandlers({
+      alarm (...argsArray) {
+        assert.strictEqual(1, argsArray.length);
+        this.emit('trigger_alarm', argsArray[0]);
+      },
+      emit_untyped (...argsArray) {
+        this.emit('untyped_event', 1, 2, 3, 4, 5);
+      }
+    });
+    x.$schema = {
+      emit: {
+        trigger_alarm: [
+          {
+            name: 'TriggerAlarm',
+            type: 'object',
+            fields: {
+              alarm_level: {
+                type: 'integer',
+                maxValue: 3
+              },
+              nested: {
+                type: 'object',
+                optional: true,
+                fields: {
+                  innerValue: {
+                    type: 'any',
+                    maxSize: 5
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      accept: { }
+    };
+
+    assert.throws(() => {
+      x.accept('alarm', { alarm_level: 4});
+    }, /Invalid data for event "trigger_alarm": Index 0 \(TriggerAlarm\)\.alarm_level: expected a number <= 3, got 4./i);
+
+    assert.throws(() => {
+      x.accept('alarm', { alarm_level: 3, nested: { innerValue: 'abcde' }});
+    }, /Invalid data for event "trigger_alarm": Index 0 \(TriggerAlarm\)\.nested\.innerValue: JSON-size too large by 2 characters./i);
+
+    assert.doesNotThrow(() => {
+      x.accept('alarm', { alarm_level: 3 });
+    });
+
+    assert.doesNotThrow(() => {
+      x.accept('emit_untyped', 1, 2, 3, 4);
+    });
+  });
+
+
+  it('emit() should emit the catch-all event "*"', function() {
+    const x = testInstance;
+    const evtLog = [];
+    const evtLog2 = [];
+
+    x.on('*', (evtName, ...evtArgs) => {
+      evtLog.push([evtName, evtArgs]);
+    });
+
+    x.once('*', (evtName, ...evtArgs) => {
+      evtLog2.push([evtName, evtArgs]);
+    });
+
+    x.emit('test_ev_1', 1, 2);
+    x.emit('test_ev_2');
+    x.emit('test_ev_3', [4, 5]);
+
+    assert.deepEqual(evtLog, [
+        ['test_ev_1', [1, 2]],
+        ['test_ev_2', []],
+        ['test_ev_3', [[4, 5]]],
+      ]);
+
+    assert.deepEqual(evtLog2, [['test_ev_1', [1, 2]]]);
+  });
+
+
+  it('emit() should emit a single catch-all event "*" using once()',
+      function() {
+    const x = testInstance;
+    const evtLog = [];
+
+    x.once('*', (evtName, ...evtArgs) => {
+      evtLog.push([evtName, evtArgs]);
+    });
+
+    x.emit('test_ev_1', 1, 2);
+    x.emit('test_ev_2');
+    x.emit('test_ev_3', [4, 5]);
+
+    assert.deepEqual(evtLog, [['test_ev_1', [1, 2]]] );
+  });
 });
