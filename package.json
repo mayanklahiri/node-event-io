@@ -1,6 +1,6 @@
 {
   "name": "event-io",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "ES6 class that combines an event acceptor and emitter.",
   "main": "lib/EventIO.js",
   "scripts": {
