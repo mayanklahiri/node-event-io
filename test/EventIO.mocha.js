@@ -14,6 +14,7 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
 
   beforeEach(function() {
     testInstance = new TestClass();
+    testInstance.setStrictSchemaMode(false);
   });
 
   afterEach(function() {
@@ -39,7 +40,7 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
   it('accept() should throw on unregistered event names', function() {
     assert.throws(() => {
       testInstance.accept('null', 123, 456);
-    }, /no matching handler for event type "null"/i);
+    }, /no registered handler for accept event "null"/i);
     assert.throws(() => {
       testInstance.accept(['null', 123, 456]);
     }, /expected string event name/i);
@@ -69,7 +70,6 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
 
   it('emit() within accept() should occur synchronously in order', function() {
     let x = testInstance;
-
     x.setAcceptHandlers({
       alarm (...argsArray) {
         this.emit('trigger_alarm', argsArray);
@@ -93,7 +93,6 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
   it('emit() should respect call counts set by on(), once(), upto()',
       function() {
     let x = testInstance;
-
     x.setAcceptHandlers({
       alarm (...argsArray) {
         this.emit('alarm_1');
@@ -137,7 +136,6 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
   it('emit() should respect call counts set by on(), once(), upto()',
       function() {
     let x = testInstance;
-
     x.setAcceptHandlers({
       alarm (...argsArray) {
         this.emit('alarm_1');
@@ -180,7 +178,6 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
 
   it('removeListener() should remove listeners of all types', function() {
     let x = testInstance;
-
     x.setAcceptHandlers({
       alarm (...argsArray) {
         this.emit('alarm_1');
@@ -216,7 +213,7 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
     x.setAcceptHandlers({alarm: null});
     assert.throws(() => {
       x.accept('alarm');
-    }, /No matching handler for event type "alarm"/i);
+    }, /No registered handler for accept event "alarm"/i);
 
     // no emits should have been triggers.
     assert.deepEqual(eventLog, ['alarm_1-a']);
@@ -252,7 +249,7 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
 
     assert.throws(() => {
       x.accept('alarm', '4');
-    }, /Invalid data for event "alarm": Index 0 \(AlarmLevel\): expected a number, got string./i);
+    }, /Invalid data for accept event "alarm": Index 0 \(AlarmLevel\): expected a number, got string./i);
 
     assert.doesNotThrow(() => {
       x.accept('alarm', 4);
@@ -262,6 +259,7 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
 
   it('emit() should match against a schema if one is present', function() {
     const x = testInstance;
+    x.setStrictSchemaMode(true);
     x.setAcceptHandlers({
       alarm (...argsArray) {
         assert.strictEqual(1, argsArray.length);
@@ -296,24 +294,39 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
           }
         ]
       },
-      accept: { }
+      accept: {
+        alarm: [
+          {
+            type: 'object',
+            fields: {
+              alarm_level: {
+                type: 'integer'
+              }
+            }
+          }
+        ]
+      }
     };
 
     assert.throws(() => {
       x.accept('alarm', { alarm_level: 4});
-    }, /Invalid data for event "trigger_alarm": Index 0 \(TriggerAlarm\)\.alarm_level: expected a number <= 3, got 4./i);
+    }, /Invalid data for emit event "trigger_alarm": Index 0 \(TriggerAlarm\)\.alarm_level: expected a number <= 3, got 4./i);
 
     assert.throws(() => {
       x.accept('alarm', { alarm_level: 3, nested: { innerValue: 'abcde' }});
-    }, /Invalid data for event "trigger_alarm": Index 0 \(TriggerAlarm\)\.nested\.innerValue: JSON-size too large by 2 characters./i);
+    }, /Invalid data for emit event "trigger_alarm": Index 0 \(TriggerAlarm\)\.nested\.innerValue: JSON-size too large by 2 characters./i);
 
     assert.doesNotThrow(() => {
       x.accept('alarm', { alarm_level: 3 });
     });
 
-    assert.doesNotThrow(() => {
+    assert.throws(() => {
       x.accept('emit_untyped', 1, 2, 3, 4);
-    });
+    }, /No schema for accept event "emit_untyped"/i);
+
+    assert.throws(() => {
+      x.emit('untyped_event', 9, 10);
+    }, /No schema for emit event "untyped_event"/i);
   });
 
 
@@ -359,4 +372,12 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
 
     assert.deepEqual(evtLog, [['test_ev_1', [1, 2]]] );
   });
+
+
+  it('emit() should not throw on untyped events in non-strict mode', function() {
+    assert.doesNotThrow(() => {
+      testInstance.emit('untyped_event', 1, 2, 3, 4);
+    });
+  });
+
 });
