@@ -1,6 +1,6 @@
 {
   "name": "event-io",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "ES6 class that combines an event acceptor and emitter.",
   "main": "lib/EventIO.js",
   "scripts": {
@@ -21,11 +21,11 @@
   "license": "MIT",
   "dependencies": {
     "lodash": "^4.17.4",
-    "runtype": "^0.1.4"
+    "runtype": "^0.1.5"
   },
   "devDependencies": {
     "chai": "^3.5.0",
     "istanbul": "^0.4.5",
-    "mocha": "^3.2.0"
+    "mocha": "^3.4.1"
   }
 }
