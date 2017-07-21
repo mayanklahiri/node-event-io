@@ -224,7 +224,6 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
     const x = testInstance;
     x.setAcceptHandlers({
       alarm (...argsArray) {
-
       }
     });
     x.$schema = {
@@ -241,15 +240,13 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
 
     assert.throws(() => {
       x.accept('alarm', 3);
-    }, /"alarm": Index 0 \(AlarmLevel\): expected a number >= 4, got 3./i);
+    }, /"alarm": "\[index 0\]": expected a number >= 4, got 3./i);
 
-    assert.throws(() => {
-      x.accept('alarm', 4, 5);
-    }, /event "alarm": expected an array of length 1, got length 2/i);
+    assert.throws(() => { x.accept('alarm', 4, 5) }, /out of range/i);
 
     assert.throws(() => {
       x.accept('alarm', '4');
-    }, /Invalid data for accept event "alarm": Index 0 \(AlarmLevel\): expected a number, got string./i);
+    }, /expected a number, got string./i);
 
     assert.doesNotThrow(() => {
       x.accept('alarm', 4);
@@ -310,11 +307,11 @@ describe('EventIO: ES6 event acceptor and emitter with runtime type checking',
 
     assert.throws(() => {
       x.accept('alarm', { alarm_level: 4});
-    }, /Invalid data for emit event "trigger_alarm": Index 0 \(TriggerAlarm\)\.alarm_level: expected a number <= 3, got 4./i);
+    }, /"trigger_alarm": "\[index 0\].alarm_level": expected a number <= 3, got 4./i);
 
     assert.throws(() => {
       x.accept('alarm', { alarm_level: 3, nested: { innerValue: 'abcde' }});
-    }, /Invalid data for emit event "trigger_alarm": Index 0 \(TriggerAlarm\)\.nested\.innerValue: JSON-size too large by 2 characters./i);
+    }, /"trigger_alarm": "\[index 0\].nested.innerValue"/i);
 
     assert.doesNotThrow(() => {
       x.accept('alarm', { alarm_level: 3 });

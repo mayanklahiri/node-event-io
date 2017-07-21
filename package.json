@@ -21,11 +21,11 @@
   "license": "MIT",
   "dependencies": {
     "lodash": "^4.17.4",
-    "runtype": "^0.1.5"
+    "runtype": "^0.2.1"
   },
   "devDependencies": {
-    "chai": "^3.5.0",
+    "chai": "^4.1.0",
     "istanbul": "^0.4.5",
-    "mocha": "^3.4.1"
+    "mocha": "^3.4.2"
   }
 }
